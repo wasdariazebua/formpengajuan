@@ -1,5 +1,13 @@
 import streamlit as st
 
+# --- FUNGSI TAMBAHAN ---
+def format_tanggal(teks):
+    teks_bersih = teks.replace(" ", "").replace("/", "")
+    if len(teks_bersih) == 8 and teks_bersih.isdigit():
+        return f"{teks_bersih[:4]}/{teks_bersih[4:6]}/{teks_bersih[6:]}"
+    return teks
+# -----------------------
+
 # Konfigurasi Halaman
 st.set_page_config(page_title="Form Pengajuan Data", layout="centered")
 
@@ -13,25 +21,49 @@ col1, col2 = st.columns(2)
 with col1:
     nama_pengaju = st.text_input("Nama Pengaju", placeholder="NAMA LENGKAP PENGAJU")
     hp_pengaju = st.text_input("No HP Pengaju", placeholder="+886 / +62 XXXX")
-    tgl_lahir = st.text_input("Tanggal Lahir", placeholder="YYYY/MM/DD")
+    tgl_lahir = st.text_input("Tanggal Lahir", placeholder="Ketik angka saja: 20030228")
     daerah = st.text_input("Daerah", placeholder="NAMA KOTA / DAERAH TINGGAL")
 with col2:
     nama_majikan = st.text_input("Nama Majikan", placeholder="NAMA MAJIKAN (MANDARIN / LATIN)")
     no_paspor = st.text_input("No. Paspor", placeholder="CONTOH: E9012345")
-    msk_taiwan = st.text_input("Masuk Taiwan", placeholder="YYYY/MM/DD")
+    msk_taiwan = st.text_input("Masuk Taiwan", placeholder="Ketik angka saja: 20251103")
 
-# --- BAGIAN 2: DETAIL PINJAMAN ---
+# --- BAGIAN 2: DETAIL PINJAMAN (DIPERBARUI) ---
 st.subheader("Detail Pinjaman")
+
+# Inisialisasi session state untuk jumlah potongan PT jika belum ada
+if 'jumlah_potongan' not in st.session_state:
+    st.session_state.jumlah_potongan = 1
+
 col3, col4 = st.columns(2)
 with col3:
-    pinjaman = st.text_input("Nominal Pinjaman", placeholder="CONTOH: 30 JT")
+    pinjaman = st.text_input("Nominal Pinjaman Utama", placeholder="CONTOH: 30 JT")
     perbulan = st.text_input("Angsuran Perbulan", placeholder="CONTOH: 8846 NT")
-    mulai_setoran = st.text_input("Mulai Setoran", placeholder="YYYY/MM/DD")
-    anak_angsuran = st.text_input("Anak Angsuran", placeholder="YYYY/MM/DD")
+    mulai_setoran = st.text_input("Mulai Setoran", placeholder="Ketik angka saja: 20260514")
+    anak_angsuran = st.text_input("Anak Angsuran", placeholder="Ketik angka saja: 20260714")
 with col4:
     bayar = st.text_input("Tenor & Potongan", placeholder="CONTOH: 12 X ( POT DALAM 2 X 8846 NT)")
     keperluan = st.text_input("Keperluan", placeholder="CONTOH: TAMBAHAN RENOV RUMAH")
-    pot_pt = st.text_input("Keterangan Potongan PT", placeholder="CONTOH: POT PT 2X 12790 (DIBAYAR MAJIKAN)")
+
+    # Bagian dinamis untuk banyak potongan/pinjaman
+    list_pot_pt = []
+    for i in range(st.session_state.jumlah_potongan):
+        val_pot = st.text_input(f"Keterangan Pinjaman/Potongan {i+1}", key=f"pot_{i}", placeholder="CONTOH: POT PT 2X 12790")
+        if val_pot:
+            list_pot_pt.append(val_pot)
+    
+    # Tombol tambah/hapus khusus untuk bagian potongan
+    col_pot1, col_pot2 = st.columns(2)
+    with col_pot1:
+        if st.session_state.jumlah_potongan < 5:
+            if st.button("➕ Tambah Baris Pinjaman", key="add_p"):
+                st.session_state.jumlah_potongan += 1
+                st.rerun()
+    with col_pot2:
+        if st.session_state.jumlah_potongan > 1:
+            if st.button("➖ Hapus Baris Pinjaman", key="del_p"):
+                st.session_state.jumlah_potongan -= 1
+                st.rerun()
 
 # --- BAGIAN 3: REKENING TUJUAN ---
 st.subheader("Rekening Tujuan")
@@ -106,35 +138,42 @@ link_line = st.text_input("Link Line", placeholder="https://line.me/ti/p/...")
 link_tiktok = st.text_input("Link Tiktok", placeholder="https://www.tiktok.com/...")
 pic = st.text_input("Penanggung Jawab / Catatan Bawah", placeholder="NAMA PIC / TIKTOK")
 
+# --- BAGIAN 7: TOMBOL GENERATE ---
 st.divider()
 
-# --- BAGIAN 7: GENERATE TEXT ---
-# Tombol utama diletakkan di luar form karena kita menggunakan input dinamis di atas
-if st.button("✨ Generate Text", type="primary"):
+# Tombol Generate Text dikembalikan menjadi tunggal tanpa kolom
+btn_generate = st.button("✨ Generate Text", type="primary", use_container_width=True)
+
+if btn_generate:
+    # 1. Format ulang semua isian tanggal secara otomatis
+    tgl_lahir_auto = format_tanggal(tgl_lahir)
+    msk_taiwan_auto = format_tanggal(msk_taiwan)
+    mulai_setoran_auto = format_tanggal(mulai_setoran)
+    anak_angsuran_auto = format_tanggal(anak_angsuran)
     
-    # 1. Menyusun teks penjamin secara otomatis (Semua di-upper)
+    # 2. Menyusun teks penjamin (sama seperti sebelumnya)
     teks_penjamin_gabung = ""
     for p in data_penjamin:
         teks_penjamin_gabung += f"{p['nama'].upper()} / {p['hub'].upper()}\n{p['hp'].upper()}\n\n"
     
-    # Mencegah tulisan kosong jika user belum mengisi penjamin sama sekali
-    if not teks_penjamin_gabung:
-        teks_penjamin_gabung = "- \n\n"
+    # 3. Menyusun list potongan PT secara otomatis
+    teks_potongan_gabung = "\n".join([p.upper() for p in list_pot_pt])
+    if not teks_potongan_gabung:
+        teks_potongan_gabung = "-"
 
-    # 2. Memformat seluruh teks sesuai dengan template
-    # CATATAN: Semua variabel diberi .upper() KECUALI bagian Link agar link tidak rusak
+    # 4. Memformat seluruh teks
     hasil_teks = f"""{nama_pengaju.upper()} = {hp_pengaju.upper()}
 NAMA MAJIKAN : {nama_majikan.upper()}
 NO. PASPOR : {no_paspor.upper()}
-TGL LAHIR : {tgl_lahir.upper()}
+TGL LAHIR : {tgl_lahir_auto.upper()}
 DAERAH : {daerah.upper()}
-MSK TAIWAN : {msk_taiwan.upper()}
+MSK TAIWAN : {msk_taiwan_auto.upper()}
 
 PINJAMAN: {pinjaman.upper()}
 BAYAR: {bayar.upper()}
 PERBULAN : {perbulan.upper()}
-MULAI SETORAN:  {mulai_setoran.upper()}
-ANAK ANGSURAN : {anak_angsuran.upper()}
+MULAI SETORAN:  {mulai_setoran_auto.upper()}
+ANAK ANGSURAN : {anak_angsuran_auto.upper()}
 KEPERLUAN :  {keperluan.upper()}
 
 REKENING TUJUAN
@@ -144,8 +183,7 @@ REKENING TUJUAN
 {rek_hp.upper()} 
 
 PENJAMIN
-{teks_penjamin_gabung}
-AGENSI : {nama_agensi.upper()} = {kode_agensi.upper()}
+{teks_penjamin_gabung}AGENSI : {nama_agensi.upper()} = {kode_agensi.upper()}
 NO TLP AGENSI :  {tlp_agensi.upper()}
 NO TLP MAJIKAN: {tlp_majikan.upper()}
 
@@ -155,7 +193,7 @@ PRINT : {print_doc.upper()}
 KIRIM BALIK : {kirim_balik.upper()}
 
 PINJAMAN 
-{pot_pt.upper()}
+{teks_potongan_gabung}
 
 
 LINK FACEBOOK :  {link_fb}
@@ -164,7 +202,5 @@ TIKTOK : {link_tiktok}
 
 {pic.upper()}"""
 
-    st.success("Teks berhasil dibuat! Silakan klik ikon 'Copy' di pojok kanan atas kotak di bawah ini:")
-    
-    # Menampilkan hasil menggunakan st.code agar muncul tombol copy otomatis
+    st.success("Teks berhasil dibuat!")
     st.code(hasil_teks, language="text")
