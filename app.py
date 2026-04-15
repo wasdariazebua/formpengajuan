@@ -1,4 +1,5 @@
 import streamlit as st
+import urllib.parse # Tambahan library untuk API WhatsApp
 
 # --- FUNGSI TAMBAHAN ---
 def format_tanggal(teks):
@@ -120,13 +121,39 @@ with col_btn2:
 # --- BAGIAN 5: AGENSI & DOKUMEN ---
 st.subheader("Agensi & Dokumen")
 col7, col8 = st.columns(2)
+
 with col7:
     nama_agensi = st.text_input("Nama Agensi", placeholder="NAMA PERUSAHAAN AGENSI")
     kode_agensi = st.text_input("Kode Agensi", placeholder="CONTOH: 0669")
     tlp_agensi = st.text_input("No Tlp Agensi", placeholder="CONTOH: 02-23625012")
     tlp_majikan = st.text_input("No Tlp Majikan", placeholder="CONTOH: LINE / NO HP")
+
 with col8:
     alamat_arc = st.text_input("Alamat ARC & Rumah Taiwan", placeholder="CONTOH: SAMA / BEDA")
+    
+    # --- FITUR DINAMIS LINK MAPS ---
+    if 'jumlah_maps' not in st.session_state:
+        st.session_state.jumlah_maps = 1
+        
+    list_maps = []
+    for j in range(st.session_state.jumlah_maps):
+        m = st.text_input(f"Link Maps {j+1}", key=f"map_{j}", placeholder="http://maps.google.com/...")
+        if m:
+            list_maps.append(m)
+            
+    c_map1, c_map2 = st.columns(2)
+    with c_map1:
+        if st.session_state.jumlah_maps < 3: # Batas maksimal 3 link maps
+            if st.button("➕ Tambah Lokasi", key="add_m", use_container_width=True):
+                st.session_state.jumlah_maps += 1
+                st.rerun()
+    with c_map2:
+        if st.session_state.jumlah_maps > 1:
+            if st.button("➖ Hapus Lokasi", key="del_m", use_container_width=True):
+                st.session_state.jumlah_maps -= 1
+                st.rerun()
+    # -------------------------------
+
     cap_merah = st.text_input("Cap Merah", placeholder="CONTOH: ADA / TIDAK")
     print_doc = st.text_input("Print", placeholder="CONTOH: SEVEN")
     kirim_balik = st.text_input("Kirim Balik", placeholder="CONTOH: SEVEN")
@@ -138,11 +165,12 @@ link_line = st.text_input("Link Line", placeholder="https://line.me/ti/p/...")
 link_tiktok = st.text_input("Link Tiktok", placeholder="https://www.tiktok.com/...")
 pic = st.text_input("Penanggung Jawab / Catatan Bawah", placeholder="NAMA PIC / TIKTOK")
 
-# --- BAGIAN 7: TOMBOL GENERATE ---
+# --- BAGIAN 7: TOMBOL GENERATE & KIRIM WA ---
 st.divider()
 
-# Tombol Generate Text dikembalikan menjadi tunggal tanpa kolom
-btn_generate = st.button("✨ Generate Text", type="primary", use_container_width=True)
+# Inputan nomor WA tujuan di bawah sudah dihapus agar tidak kerja dua kali
+
+btn_generate = st.button("✨ Generate Text & Buat Link WA", type="primary", use_container_width=True)
 
 if btn_generate:
     # 1. Format ulang semua isian tanggal secara otomatis
@@ -151,17 +179,29 @@ if btn_generate:
     mulai_setoran_auto = format_tanggal(mulai_setoran)
     anak_angsuran_auto = format_tanggal(anak_angsuran)
     
-    # 2. Menyusun teks penjamin (sama seperti sebelumnya)
+    # 2. Menyusun teks penjamin
     teks_penjamin_gabung = ""
     for p in data_penjamin:
         teks_penjamin_gabung += f"{p['nama'].upper()} / {p['hub'].upper()}\n{p['hp'].upper()}\n\n"
     
-    # 3. Menyusun list potongan PT secara otomatis
+    if not teks_penjamin_gabung:
+        teks_penjamin_gabung = "- \n\n"
+
+    # 3. Menyusun list potongan PT
     teks_potongan_gabung = "\n".join([p.upper() for p in list_pot_pt])
     if not teks_potongan_gabung:
         teks_potongan_gabung = "-"
 
-    # 4. Memformat seluruh teks
+    # 4. Menyusun Link Maps secara otomatis
+    # Jika ada lebih dari 1, akan muncul LINK MAPS 1, LINK MAPS 2, dst.
+    if len(list_maps) > 1:
+        teks_maps_gabung = "\n".join([f"LINK MAPS {idx+1} : {m}" for idx, m in enumerate(list_maps)])
+    elif len(list_maps) == 1:
+        teks_maps_gabung = f"LINK MAPS : {list_maps[0]}"
+    else:
+        teks_maps_gabung = "LINK MAPS : -"
+
+    # 5. Memformat seluruh teks
     hasil_teks = f"""{nama_pengaju.upper()} = {hp_pengaju.upper()}
 NAMA MAJIKAN : {nama_majikan.upper()}
 NO. PASPOR : {no_paspor.upper()}
@@ -198,9 +238,28 @@ PINJAMAN
 
 LINK FACEBOOK :  {link_fb}
 LINK LINE :  {link_line}
-TIKTOK : {link_tiktok}
+{teks_maps_gabung}
+LINK TIKTOK : {link_tiktok}
 
 {pic.upper()}"""
 
     st.success("Teks berhasil dibuat!")
     st.code(hasil_teks, language="text")
+
+    # 5. Logika untuk tombol API WhatsApp mengambil langsung dari hp_pengaju
+    if hp_pengaju:
+        # Bersihkan spasi, strip, atau tanda plus dari input nomor HP Pengaju di bagian 1
+        no_wa_bersih = hp_pengaju.replace("+", "").replace("-", "").replace(" ", "")
+        
+        # Mengubah teks form menjadi format yang terbaca oleh URL
+        teks_encode = urllib.parse.quote(hasil_teks)
+        
+        # Membuat link API WhatsApp
+        link_wa = f"https://wa.me/{no_wa_bersih}?text={teks_encode}"
+        
+        st.success(f"Link WhatsApp siap dikirim ke {hp_pengaju}!")
+        # Memunculkan tombol khusus
+        teks_tombol = f"📲 Buka WA & Kirim ke {nama_pengaju.upper() if nama_pengaju else 'Pengaju'}"
+        st.link_button(teks_tombol, url=link_wa, type="primary", use_container_width=True)
+    else:
+        st.warning("💡 Peringatan: Kolom 'No HP Pengaju' di bagian atas masih kosong. Isi nomornya agar tombol kirim otomatis muncul di sini.")
